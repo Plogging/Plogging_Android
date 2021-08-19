@@ -78,6 +78,10 @@ class TrashButtonView : ConstraintLayout {
 
     fun getTrashCount() = trashCountView.text.toString().toInt()
 
+    fun setTrashCount(count: Int) {
+        trashCountView.text = count.toString()
+    }
+
     //디폴트 설정
     private fun setTypeArray(typedArray: TypedArray) {
         //이미지의 아이콘 지정

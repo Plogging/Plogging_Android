@@ -6,7 +6,10 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.os.bundleOf
+import androidx.navigation.NavDeepLinkBuilder
 import com.plogging.ecorun.R
+import com.plogging.ecorun.data.model.NotificationArgs
 
 object RunningNotification {
     private const val CHANNEL_ID = "Plogging"
@@ -27,13 +30,24 @@ object RunningNotification {
         }
     }
 
-    fun generateNotification(context: Context): Notification {
-
+    fun generateNotification(
+        context: Context,
+        args: NotificationArgs?,
+        time: String
+    ): Notification {
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+        val pendingIntent = NavDeepLinkBuilder(context)
+            .setGraph(R.navigation.nav_auth)
+            .setDestination(R.id.nav_auth_home)
+            .setArguments(bundleOf("backgroundData" to args))
+            .createPendingIntent()
         return builder.setContentTitle("플로깅 중입니다!")
-            .setSmallIcon(R.drawable.auth_logo)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setSmallIcon(R.drawable.auth_logo)
+            .setContentIntent(pendingIntent)
+            .setContentText(time)
+            .setAutoCancel(true)
             .setOngoing(true)
             .build()
     }

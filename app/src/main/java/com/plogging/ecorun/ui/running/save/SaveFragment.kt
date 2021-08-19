@@ -142,7 +142,7 @@ class SaveFragment : BaseFragment<FragmentSaveBinding, SaveViewModel>() {
 
     //뒤로가기 클릭 시
     private fun backPress() {
-        requireActivity().onBackPressedDispatcher.addCallback {
+        requireActivity().onBackPressedDispatcher.addCallback(this) {
             findNavController().navigate(R.id.action_save_to_dialog_delete)
         }
     }

@@ -13,6 +13,13 @@
         android:name="com.plogging.ecorun.ui.auth.home.AuthHomeFragment"
         android:label="fragment_main"
         tools:layout="@layout/fragment_auth">
+
+        <argument
+            android:name="locationList"
+            android:defaultValue="@null"
+            app:argType="com.plogging.ecorun.data.model.NotificationArgs"
+            app:nullable="true" />
+
         <action
             android:id="@+id/action_auth_to_policy_dialog"
             app:destination="@+id/nav_dialog_policy" />

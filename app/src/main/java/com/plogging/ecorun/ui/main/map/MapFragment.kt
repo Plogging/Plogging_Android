@@ -53,18 +53,26 @@ class MapFragment : BaseFragment<FragmentMapBinding, MapViewModel>() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        initSharedViewModel()
-        setMarkerImg()
-        getMyName()
-        initView()
-        checkPermission()
-        initLocationCallback()
+        checkNotificationArgs()
     }
 
     override fun onStop() {
         fusedLocationClient?.removeLocationUpdates(locationCallback)
         mapFragment.onExitAmbient()
         super.onStop()
+    }
+
+    private fun checkNotificationArgs() {
+        if (arguments == null) {
+            initSharedViewModel()
+            setMarkerImg()
+            getMyName()
+            initView()
+            checkPermission()
+            initLocationCallback()
+        } else {
+            findNavController().navigate(R.id.action_map_to_running, arguments)
+        }
     }
 
     private fun initSharedViewModel() {
@@ -82,8 +90,6 @@ class MapFragment : BaseFragment<FragmentMapBinding, MapViewModel>() {
                 if (locationList.isNotEmpty()) {
                     val location = locationList.last()
                     val latLng = LatLng(location.latitude, location.longitude)
-                    SharedPreference.setLongitude(requireContext(), latLng.longitude.toFloat())
-                    SharedPreference.setLatitude(requireContext(), latLng.latitude.toFloat())
                     gpsHelper.isGPSOn.value = true
                     //set marker
                     if (currLocationMarker != null) currLocationMarker?.remove()

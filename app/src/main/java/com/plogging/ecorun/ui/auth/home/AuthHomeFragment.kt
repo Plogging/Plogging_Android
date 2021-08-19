@@ -66,7 +66,7 @@ class AuthHomeFragment : BaseFragment<FragmentAuthBinding, AuthHomeViewModel>() 
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        autoLogin()
+        navigate()
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -132,8 +132,10 @@ class AuthHomeFragment : BaseFragment<FragmentAuthBinding, AuthHomeViewModel>() 
         SharedPreference.setUserName(requireContext(), viewModel.userName.value!!)
     }
 
-    private fun autoLogin() {
-        if (SharedPreference.getUserEmail(requireContext()).isNotEmpty()) {
+    private fun navigate() {
+        if (arguments?.isEmpty == false) {
+            arguments?.let { findNavController().navigate(R.id.action_auth_to_main, it) }
+        } else if (SharedPreference.getUserEmail(requireContext()).isNotEmpty()) {
             findNavController().navigate(R.id.action_auth_to_main)
         }
     }

@@ -4,7 +4,6 @@ import android.os.Bundle
 import android.view.View
 import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.NavHostFragment
-import androidx.navigation.ui.onNavDestinationSelected
 import androidx.navigation.ui.setupWithNavController
 import com.plogging.ecorun.R
 import com.plogging.ecorun.base.BaseFragment
@@ -37,14 +36,16 @@ class MainFragment : BaseFragment<FragmentMainBinding, MainViewModel>() {
         val navHostFragment =
             childFragmentManager.findFragmentById(R.id.nav_host_container) as NavHostFragment
         val navController = navHostFragment.navController
+        // argument를 넘기기 위해서는 xml에 graph를 지정하지 않고 코드를 직접 작성한다.
+        navController.setGraph(R.navigation.nav_main, arguments)
         // 반드시 navigation id와 menu id가 같아야한다.
         binding.bottomNav.setupWithNavController(navController)
         var selectedId = binding.bottomNav.selectedItemId
-        parentFragmentManager.primaryNavigationFragment
         binding.bottomNav.setOnItemSelectedListener {
             if (selectedId != it.itemId) {
                 selectedId = it.itemId
-                it.onNavDestinationSelected(navController)
+                navController.navigate(it.itemId, arguments)
+                true
             } else false
         }
     }

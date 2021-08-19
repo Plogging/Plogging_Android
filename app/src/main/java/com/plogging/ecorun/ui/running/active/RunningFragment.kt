@@ -29,6 +29,7 @@ import com.google.maps.android.ktx.awaitMap
 import com.plogging.ecorun.R
 import com.plogging.ecorun.base.BaseFragment
 import com.plogging.ecorun.data.local.SharedPreference
+import com.plogging.ecorun.data.model.NotificationArgs
 import com.plogging.ecorun.databinding.FragmentRunningBinding
 import com.plogging.ecorun.ui.main.MainViewModel
 import com.plogging.ecorun.util.extension.*
@@ -44,26 +45,28 @@ class RunningFragment : BaseFragment<FragmentRunningBinding, RunningViewModel>()
     override val viewModel: RunningViewModel by viewModels()
     private val latLngList: MutableList<LatLng> = mutableListOf()
     private var runningService: RunningService? = null
+    private var isTrashTransitionVisible = false
     private var runningLocationServiceBound = false
     private var currentMarker: Marker? = null
     private lateinit var map: GoogleMap
     private var startMarker: Marker? = null
-    private val trashCountList = IntArray(6)
+    private var trashCountList = IntArray(6)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        initServiceConnection()
-        initView()
-        readyTimer()
-        bottomViewDown()
         manageRunningState()
+        initServiceConnection()
+        initDataFromNotification()
+        initView()
+        bottomViewDown()
         getDistance()
-        getTimerNumber()
     }
 
+    // 바인드된 서비스는 화면이 보여지면 실행된다. 그리고 서비스에서는 foregroundService를 비활성화 한다.
     override fun onStart() {
         super.onStart()
-        backPress()
+        runningService?.stopForeground(true)
+        runningService?.serviceRunningInForeground = false
         val serviceIntent = Intent(requireContext(), RunningService()::class.java)
         requireActivity().bindService(
             serviceIntent,
@@ -72,12 +75,15 @@ class RunningFragment : BaseFragment<FragmentRunningBinding, RunningViewModel>()
         )
     }
 
+    // 뒤로가기를 이곳에 구현하여 기본 activity back press를 커스텀한다.
     override fun onResume() {
         super.onResume()
+        backPress()
         LocalBroadcastManager.getInstance(requireContext()).registerReceiver(
             runningBroadcastReceiver,
             IntentFilter(RunningService.ACTION_FOREGROUND_ONLY_LOCATION_BROADCAST)
         )
+
         if (!allGranted()) requireContext().toast(getString(R.string.deny_permission))
     }
 
@@ -88,7 +94,10 @@ class RunningFragment : BaseFragment<FragmentRunningBinding, RunningViewModel>()
         super.onPause()
     }
 
+    // 바인드된 서비스를 해제시키고 notification을 띄운다.
     override fun onStop() {
+        runningService?.trashCountList = trashCountList
+        runningService?.distance = viewModel.distanceMeter.value!!
         if (runningLocationServiceBound) {
             requireActivity().unbindService(runningServiceConnection)
             runningLocationServiceBound = false
@@ -127,12 +136,38 @@ class RunningFragment : BaseFragment<FragmentRunningBinding, RunningViewModel>()
                 runningService = binder.service
                 runningLocationServiceBound = true
                 runningService?.subscribeToLocationUpdates()
+                // 노티를 클릭하면 아래의 코드 실행
+                // 노티를 클릭하고 앱 밖으로 나가 어플 아이콘이나 실행하고 있는 어플리케이션 클릭시 이 때 argument는 null이 아니다
+                // startMarker가 초기화가 아직 되지 않은 것으로 노티를 클릭해 처음부터 실행된다는 것을 판단한다.
+                if (arguments != null && startMarker == null) {
+                    val args = arguments?.get("backgroundData") as NotificationArgs
+                    viewModel.runningState.onNext(args.runningState!!)
+                    runningService?.compositeDisposable?.dispose()
+                    runningService?.runningTime?.onNext(args.time!!)
+                    runningService?.startTimer()
+                    viewModel.distanceMeter.onNext(args.distance)
+                    trashCountList = args.trashList
+                    setTrashArrayView()
+                    if (runningService?.locationList?.isEmpty() == true)
+                        args.locationList?.map { runningService?.locationList?.add(it) }
+                }
             }
 
             override fun onServiceDisconnected(name: ComponentName) {
                 runningService = null
                 runningLocationServiceBound = false
             }
+        }
+    }
+
+    private fun initDataFromNotification() {
+        if (arguments == null) {
+            getTimerNumber(0)
+            readyTimer()
+        } else {
+            val args = arguments?.get("backgroundData") as NotificationArgs
+            viewModel.runningState.onNext(RunningViewModel.RunningState.START)
+            getTimerNumber(args.time!!)
         }
     }
 
@@ -177,20 +212,17 @@ class RunningFragment : BaseFragment<FragmentRunningBinding, RunningViewModel>()
             .addTo(disposables)
     }
 
-    private fun getTimerNumber() {
-        viewModel.runningSeconds
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribe({ binding.tvRunningTimeNum.text = it.toSplitTime() }, {})
-            .addTo(disposables)
+    private fun getTimerNumber(time: Int) {
+        binding.tvRunningTimeNum.text = time.toSplitTime()
     }
 
     // 달리기 상태에 따라 뷰가 바뀜
     private fun manageRunningState() {
         viewModel.runningState.subscribe({ status ->
+            runningService?.runningState?.onNext(status)
             when (status) {
                 RunningViewModel.RunningState.START -> {
                     activity?.startService(Intent(requireContext(), RunningService::class.java))
-                    viewModel.runningTimer()
                     binding.mlRunning.setTransition(
                         R.id.start_count_disappear,
                         R.id.end_count_disappear
@@ -239,7 +271,12 @@ class RunningFragment : BaseFragment<FragmentRunningBinding, RunningViewModel>()
     }
 
     override fun clickListener() {
+        var bundle = bundleOf()
         binding.ivRunningStop.setOnClickListener {
+            bundle = bundleOf(
+                getString(R.string.distance) to viewModel.distanceMeter.value,
+                getString(R.string.running_time) to runningService?.runningTime?.value,
+            )
             runningService?.unsubscribeToLocationUpdates()
             viewModel.runningState.onNext(RunningViewModel.RunningState.STOP)
         }
@@ -249,6 +286,7 @@ class RunningFragment : BaseFragment<FragmentRunningBinding, RunningViewModel>()
             else viewModel.runningState.onNext(RunningViewModel.RunningState.ACTIVE)
         }
         binding.btnRunningSaveTrash.setOnClickListener {
+            isTrashTransitionVisible = true
             binding.mlRunning.setTransition(
                 R.id.start_show_trash_dialog,
                 R.id.end_show_trash_dialog
@@ -256,27 +294,34 @@ class RunningFragment : BaseFragment<FragmentRunningBinding, RunningViewModel>()
             binding.mlRunning.transitionToEnd()
         }
         binding.btnTrashSave.setOnClickListener {
-            binding.mlRunning.transitionToStart()
             saveTrashCountArray()
-            binding.tvRunningTrashCount.text = trashCountList.sum().toString()
         }
         binding.btnRunningFinish.setOnClickListener {
-            val bundle = bundleOf(
-                getString(R.string.distance) to viewModel.distanceMeter.value,
-                getString(R.string.trash_type) to trashCountList,
-                getString(R.string.running_time) to viewModel.runningSeconds.value,
-            )
+            bundle.putIntArray(getString(R.string.trash_type), trashCountList)
             findNavController().navigate(R.id.action_plogging_running_to_running_finish, bundle)
         }
     }
 
+    private fun setTrashArrayView() {
+        binding.tbvTrashVinyl.setTrashCount(trashCountList[0])
+        binding.tbvTrashGlass.setTrashCount(trashCountList[1])
+        binding.tbvTrashPaper.setTrashCount(trashCountList[2])
+        binding.tbvTrashPlastic.setTrashCount(trashCountList[3])
+        binding.tbvTrashCan.setTrashCount(trashCountList[4])
+        binding.tbvTrashExt.setTrashCount(trashCountList[5])
+        binding.tvRunningTrashCount.text = trashCountList.sum().toString()
+    }
+
     private fun saveTrashCountArray() {
         trashCountList[0] = binding.tbvTrashVinyl.getTrashCount()
-        trashCountList[1] = binding.tbvTrashPaper.getTrashCount()
-        trashCountList[2] = binding.tbvTrashCan.getTrashCount()
-        trashCountList[3] = binding.tbvTrashGlass.getTrashCount()
-        trashCountList[4] = binding.tbvTrashPlastic.getTrashCount()
+        trashCountList[1] = binding.tbvTrashGlass.getTrashCount()
+        trashCountList[2] = binding.tbvTrashPaper.getTrashCount()
+        trashCountList[3] = binding.tbvTrashPlastic.getTrashCount()
+        trashCountList[4] = binding.tbvTrashCan.getTrashCount()
         trashCountList[5] = binding.tbvTrashExt.getTrashCount()
+        binding.tvRunningTrashCount.text = trashCountList.sum().toString()
+        isTrashTransitionVisible = false
+        binding.mlRunning.transitionToStart()
     }
 
     private fun allGranted() =
@@ -285,17 +330,22 @@ class RunningFragment : BaseFragment<FragmentRunningBinding, RunningViewModel>()
 
     //뒤로가기 클릭 시
     private fun backPress() {
-        activity?.onBackPressedDispatcher?.addCallback {
-            val bundle = bundleOf("stop" to "stop")
-            findNavController().navigate(R.id.action_plogging_running_to_running_finish, bundle)
+        activity?.onBackPressedDispatcher?.addCallback(this) {
+            if (isTrashTransitionVisible) saveTrashCountArray()
+            else {
+                val bundle = bundleOf("stop" to "stop")
+                findNavController().navigate(R.id.action_plogging_running_to_running_finish, bundle)
+            }
         }
     }
 
     private inner class RunningBroadcastReceiver : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            val locationList = intent.getParcelableArrayListExtra<Location>(
-                RunningService.EXTRA_LOCATION
+            val backgroundData = intent.getParcelableExtra<NotificationArgs>(
+                RunningService.EXTRA_BACKGROUND_DATA
             )
+            val locationList = backgroundData?.locationList
+            getTimerNumber(backgroundData?.time!!)
             // DB에 저장
             if (locationList?.isNotEmpty()!!) {
                 locationToScreen(locationList)
@@ -310,5 +360,4 @@ class RunningFragment : BaseFragment<FragmentRunningBinding, RunningViewModel>()
             }
         }
     }
-
 }

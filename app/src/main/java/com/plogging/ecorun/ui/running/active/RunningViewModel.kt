@@ -11,7 +11,6 @@ import java.util.concurrent.TimeUnit
 class RunningViewModel : BaseViewModel() {
     val runningState = BehaviorSubject.createDefault(RunningState.INITIAL)
     val distanceMeter = BehaviorSubject.createDefault(0.001f)
-    val runningSeconds = BehaviorSubject.createDefault(1)
     val lastDistance = PublishSubject.create<Float>()
     val readySeconds = PublishSubject.create<Int>()
 
@@ -20,13 +19,6 @@ class RunningViewModel : BaseViewModel() {
             .map(Long::toInt)
             .doOnComplete { runningState.onNext(RunningState.START) }
             .subscribe({ readySeconds.onNext(3 - it) }, {})
-            .addTo(compositeDisposable)
-
-    fun runningTimer() =
-        Observable.interval(1, TimeUnit.SECONDS)
-            .map(Long::toInt)
-            .filter { runningState.value == RunningState.ACTIVE }
-            .subscribe({ runningSeconds.onNext(runningSeconds.value?.plus(1)!!) }, {})
             .addTo(compositeDisposable)
 
     fun getDistance() =

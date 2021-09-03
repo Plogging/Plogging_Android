@@ -37,24 +37,4 @@ class RunningViewModelTest : TestCase() {
         assertEquals(listOf(3, 2, 1, 0), testTimeSubject.values())
         assertEquals(RunningViewModel.RunningState.START, runningViewModel.runningState.value)
     }
-
-    @Test
-    fun startRunningTimer_running_returnSecond() {
-        // 활동 상태에서 4초가 지나면 5초가 나와야한다. 초기값은 1
-        runningViewModel.runningState.onNext(RunningViewModel.RunningState.ACTIVE)
-        runningViewModel.runningSeconds.subscribe(testTimeSubject)
-        runningViewModel.runningTimer()
-        Thread.sleep(4500)
-        assertEquals(5, testTimeSubject.values().last())
-
-        // 일시정지 상태에서 4초가 지나면 5초가 나와야한다.
-        runningViewModel.runningState.onNext(RunningViewModel.RunningState.PAUSE)
-        Thread.sleep(4000)
-        assertEquals(5, testTimeSubject.values().last())
-
-        // 활동 상태에서 4초가 지나면 기존 값에 초마다 1씩 더해져 9초가 나와야한다.
-        runningViewModel.runningState.onNext(RunningViewModel.RunningState.ACTIVE)
-        Thread.sleep(4000)
-        assertEquals(9, testTimeSubject.values().last())
-    }
 }
